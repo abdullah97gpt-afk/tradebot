@@ -3,7 +3,7 @@
  * Wires Supabase data + realtime events to DOM updates.
  */
 
-import { fetchLatestSignals, subscribeToSignals } from "./supabase.js";
+import { fetchLatestSignals, subscribeToSignals, checkConnection } from "./supabase.js";
 import { initChart, setCandles, updateSignalLines } from "./charts.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,23 +40,32 @@ export async function initDashboard() {
     initChart(DOM.chartContainer);
   }
 
-  // Load initial data
+  // Run a quick connectivity check before subscribing
+  const { ok, error: connError } = await checkConnection();
+  if (!ok) {
+    setConnectionStatus(false);
+    console.error("[dashboard] Supabase connection failed:", connError);
+  }
+
+  // Load initial snapshot
   await loadSignals();
 
-  // Realtime subscription
-  const channel = subscribeToSignals((newSignal) => {
-    setConnectionStatus(true);
-    prependSignalToHistory(newSignal);
-    renderLatestSignal(newSignal);
-    updateSignalLines(newSignal);
-    flashUpdateIndicator();
-  });
+  // Realtime subscription — onStatusChange keeps the dot accurate
+  subscribeToSignals(
+    (newSignal) => {
+      setConnectionStatus(true);
+      prependSignalToHistory(newSignal);
+      renderLatestSignal(newSignal);
+      updateSignalLines(newSignal);
+      flashUpdateIndicator();
+    },
+    (status) => {
+      setConnectionStatus(status === "SUBSCRIBED");
+    }
+  );
 
-  // Mark connected after subscribe
-  setConnectionStatus(true);
-
-  // Fallback polling every 30s in case realtime drops
-  setInterval(loadSignals, 30_000);
+  // Fallback polling in case realtime drops
+  setInterval(loadSignals, APP_CONFIG.app.refreshInterval);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
