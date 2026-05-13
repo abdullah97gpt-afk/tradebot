@@ -34,3 +34,5 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+ai_engine/.env
